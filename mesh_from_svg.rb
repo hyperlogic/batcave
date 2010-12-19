@@ -49,7 +49,7 @@ module MeshFromSVG
       case token
       when "M"
         # moveto absolute
-        while !(tokens[0] =~ command_pattern) do
+        while !(tokens[0] =~ command_pattern) and tokens.size > 0 do
           x = tokens.shift.to_f
           y = tokens.shift.to_f
           # puts "(#{x}, #{y})"
@@ -58,7 +58,7 @@ module MeshFromSVG
       when "m"
         # moveto relative
         prev = [0, 0]
-        while !(tokens[0] =~ command_pattern) do
+        while !(tokens[0] =~ command_pattern) and tokens.size > 0 do
           x = tokens.shift.to_f
           y = tokens.shift.to_f
           # puts "(#{x}, #{y})"
@@ -67,14 +67,14 @@ module MeshFromSVG
         end
       when "L"
         # lineto absolute
-        while !(tokens[0] =~ command_pattern) do
+        while !(tokens[0] =~ command_pattern) and tokens.size > 0 do
           x = tokens.shift.to_f
           y = tokens.shift.to_f
           # puts "(#{x}, #{y})"
           positions << [x, y]
         end
       when /[zZ]/
-        break
+        tokens = []
       else
         raise "ERROR: unsupprted token \"#{token}\""
       end

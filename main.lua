@@ -29,13 +29,18 @@ tune = {
     player_sonar_cost = 4,
     player_sonar_regen_timer = 3,
     player_sonar_regen_rate = 4,
+    player_pickup_vial_amount = 25,
+    player_pickup_sonar_amount = 30
 }
 
 -- type to color map
 type_color = {
-    ground = {0, 255, 0, 255},
+    ground = {0, 127, 0, 255},
     spikes = {255, 0, 0, 255},
 }
+
+-- textures
+textures = {}
 
 local function new_particle(px, py, vx, vy)
     return { px = px, py = py, 
@@ -63,6 +68,15 @@ local function new_splat(px, py, nx, ny, alpha, type)
     return {px = px, py = py, 
             nx = nx, ny = ny, 
             ttl = tune.splat_lifetime * alpha, 
+            type = type}
+end
+
+local function new_item(px, py, type)
+    
+    return {px = px, py = py,
+            alpha = 0,
+            width = 32,
+            quad = gfx.newQuad(0, 0, 32, 32, 32, 32),
             type = type}
 end
 
@@ -107,6 +121,8 @@ function create_bsp_from_table(filename)
                 ping.player_spawn_x = line[1]
                 ping.player_spawn_y = line[2]
             end
+        elseif ltype ~= "ground" and ltype ~= "spikes" then
+            ping.item_list:add(new_item(line[1], line[2], ltype))
         else
             -- copy line
             table.insert(new_lines, line)
@@ -121,13 +137,20 @@ function love.load()
     ping.fps = 0
     ping.ring_list = list.new()
     ping.splat_list = list.new()
+    ping.item_list = list.new()
     ping.restart_timer = 0
     ping.waiting_for_restart = false
+
+    -- load textures
+    textures.star = gfx.newImage("star.png")
+    textures.vial = gfx.newImage("vial.png")
+    textures.sonar = gfx.newImage("sonar.png")
 
     print("Welcome to Ping!")
 
     -- load first level
-    ping.bsp = create_bsp_from_table("ping/batcave")
+    --ping.bsp = create_bsp_from_table("ping/batcave")
+    ping.bsp = create_bsp_from_table("ping/caverns")
 
     -- make sure we added a player
     assert(ping.player)
@@ -159,90 +182,6 @@ function draw_segment(x1, y1, x2, y2, alpha)
 
 end
 
-function love.draw()
-
-   gfx.setBackgroundColor(0, 0, 0)
-   gfx.setBlendMode("additive")
-
-   -- draw fps
-   gfx.setColor(255, 255, 255, 255)
-   --gfx.print("fps = "..ping.fps, 50, 50)
-   --gfx.print("num_nodes = "..ping.bsp.num_nodes, 50, 20 )
-
-   -- camera follows player
-   gfx.push()
-   gfx.translate(-ping.player.px + (gfx.getWidth()/2), -ping.player.py + (2*gfx.getHeight()/3))
-
-   --bsp.draw(ping.bsp)
-
-   -- draw rings
-   for ring in ping.ring_list:values() do
-       local alpha = (ring.ttl > 0) and (ring.ttl / tune.ring_lifetime) or 0
-       gfx.setColor(0, 255, 0, 255 * alpha)
-       local prev_p, first_p
-       for p in ring:values() do
-           if prev_p then
-               draw_segment(prev_p.px, prev_p.py, p.px, p.py, alpha)
-           else
-               first_p = p
-           end
-           prev_p = p
-       end
-       draw_segment(prev_p.px, prev_p.py, first_p.px, first_p.py, alpha)
-   end
-
-   -- draw splats
-   for splat in ping.splat_list:values() do
-       local alpha = (splat.ttl > 0) and (splat.ttl / tune.splat_lifetime) or 0
-
-       local color = type_color[splat.type]
-       if not color then
-           color = {0, 255, 0, 255}
-       end
-       local brightness = 0.4
-       gfx.setColor(color[1] * brightness, color[2] * brightness, color[3] * brightness, color[4] * alpha)
-
-       local ox, oy = 2 * splat.ny, 2 * -splat.nx
-       gfx.line(splat.px + ox, splat.py + oy, splat.px - ox, splat.py - oy)
-
-       --gfx.point(splat.px, splat.py)
-   end
-
-   ping.player:draw()
-
-   gfx.pop()
-
-   -- draw health
-   gfx.setColor(32, 32, 32, 255)
-   local left, top = 50, 10
-   local width, height = 400, 20
-   local x_border, y_border = 6, 3
-   gfx.rectangle("fill", left, top, width, height)
-
-   local scale = ping.player.health / tune.player_max_health
-
-   gfx.setColor(0, 0, 0, 255)
-   gfx.rectangle("fill", left + x_border, top + y_border, width - (2*x_border), height - (2*y_border))
-   gfx.setColor(128, 32, 32, 255)
-   gfx.rectangle("fill", left + x_border, top + y_border, scale * (width - (2*x_border)), height - (2*y_border))
-
-   -- draw sonar
-   gfx.setColor(32, 32, 32, 255)
-   local left, top = 10, 40
-   local width, height = 20, 400
-   local x_border, y_border = 3, 6
-   gfx.rectangle("fill", left, top, width, height)
-
-   local scale = ping.player.sonar / tune.player_max_sonar
-
-   gfx.setColor(0, 0, 0, 255)
-   gfx.rectangle("fill", left + x_border, top + y_border, width - (2*x_border), height - (2*y_border))
-   gfx.setColor(32, 32, 128, 255)
-
-   local y_offset = (1 - scale) * (height - (2*y_border))
-   gfx.rectangle("fill", left + x_border, top + y_border + y_offset, width - (2*x_border), (scale * (height - (2*y_border))))
-
-end
 
 function love.mousepressed(x, y, button)
 end
@@ -306,6 +245,35 @@ function love.update(dt)
    -- process player
    ping.player:process(dt)
 
+   -- process items
+   ping.item_list:for_each_remove(
+       function (item)
+           -- check line of sight and proximity to player.
+           local line = {item.px, item.py, ping.player.px, ping.player.py}
+           local ix = ping.bsp:line_probe(line)
+           local FADE_RATE = 2
+           if ix then
+               -- fade out
+               item.alpha = item.alpha - FADE_RATE * dt
+               if item.alpha < 0 then
+                   item.alpha = 0
+               end
+           else
+               -- fade in
+               item.alpha = item.alpha + FADE_RATE * dt
+               if item.alpha > 1 then
+                   item.alpha = 1
+               end
+           end
+
+           local PICKUP_RADIUS = 15
+           if math.sqrt((item.px - ping.player.px)^2 + (item.py - ping.player.py)^2) < PICKUP_RADIUS then
+               ping.player:pickup(item)
+               return true
+           end
+       end)
+
+
    ping.restart_timer = ping.restart_timer - dt
    if ping.player.dead and not ping.waiting_for_restart then
        ping.restart_timer = 3
@@ -317,4 +285,97 @@ function love.update(dt)
        ping.waiting_for_restart = false
    end
    
+end
+
+function love.draw()
+
+   gfx.setBackgroundColor(0, 0, 0)
+   gfx.setBlendMode("additive")
+
+   -- draw fps
+   gfx.setColor(255, 255, 255, 255)
+   --gfx.print("fps = "..ping.fps, 50, 50)
+   --gfx.print("num_nodes = "..ping.bsp.num_nodes, 50, 20 )
+
+   -- camera follows player
+   gfx.push()
+   gfx.translate(-ping.player.px + (gfx.getWidth()/2), -ping.player.py + (2*gfx.getHeight()/3))
+
+   --bsp.draw(ping.bsp)
+
+   -- draw rings
+   for ring in ping.ring_list:values() do
+       local alpha = (ring.ttl > 0) and (ring.ttl / tune.ring_lifetime) or 0
+       gfx.setColor(0, 255, 0, 255 * alpha)
+       local prev_p, first_p
+       for p in ring:values() do
+           if prev_p then
+               draw_segment(prev_p.px, prev_p.py, p.px, p.py, alpha)
+           else
+               first_p = p
+           end
+           prev_p = p
+       end
+       draw_segment(prev_p.px, prev_p.py, first_p.px, first_p.py, alpha)
+   end
+
+   -- draw splats
+   for splat in ping.splat_list:values() do
+       local alpha = (splat.ttl > 0) and (splat.ttl / tune.splat_lifetime) or 0
+
+       local color = type_color[splat.type]
+       if not color then
+           color = {0, 255, 0, 255}
+       end
+       local brightness = 1.0
+       gfx.setColor(color[1] * brightness, color[2] * brightness, color[3] * brightness, color[4] * alpha)
+
+       local ox, oy = 2 * splat.ny, 2 * -splat.nx
+       gfx.line(splat.px + ox, splat.py + oy, splat.px - ox, splat.py - oy)
+
+       --gfx.point(splat.px, splat.py)
+   end
+
+   ping.player:draw()
+
+   -- draw items
+   for item in ping.item_list:values() do
+       gfx.setColor(255, 255, 255, 255*item.alpha)
+       gfx.drawq(textures[item.type], item.quad, item.px - item.width/2, item.py - item.width/2, 0)
+   end
+
+   gfx.pop()
+
+   -- UI
+
+   -- draw health
+   gfx.setColor(32, 32, 32, 255)
+   local left, top = 50, 10
+   local width, height = 400, 20
+   local x_border, y_border = 6, 3
+   gfx.rectangle("fill", left, top, width, height)
+
+   local scale = ping.player.health / tune.player_max_health
+
+   gfx.setColor(0, 0, 0, 255)
+   gfx.rectangle("fill", left + x_border, top + y_border, width - (2*x_border), height - (2*y_border))
+   gfx.setColor(180, 32, 32, 255)
+   gfx.rectangle("fill", left + x_border, top + y_border, scale * (width - (2*x_border)), height - (2*y_border))
+
+   -- draw sonar
+   gfx.setColor(32, 32, 32, 255)
+   local left, top = 10, 40
+   local width, height = 20, 400
+   local x_border, y_border = 3, 6
+   gfx.rectangle("fill", left, top, width, height)
+
+   local scale = ping.player.sonar / tune.player_max_sonar
+
+   gfx.setColor(0, 0, 0, 255)
+   gfx.rectangle("fill", left + x_border, top + y_border, width - (2*x_border), height - (2*y_border))
+   gfx.setColor(32, 128, 32, 255)
+
+   local y_offset = (1 - scale) * (height - (2*y_border))
+   gfx.rectangle("fill", left + x_border, top + y_border + y_offset, width - (2*x_border), (scale * (height - (2*y_border))))
+
 end

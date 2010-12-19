@@ -2,6 +2,22 @@ local gfx = love.graphics
 
 module(..., package.seeall)
 
+local function pickup(player, item)
+    if item.type == "vial" then
+        player.health = player.health + tune.player_pickup_vial_amount
+        if player.health > tune.player_max_health then
+            player.health = tune.player_max_health
+        end
+    elseif item.type == "sonar" then
+        player.sonar = player.sonar + tune.player_pickup_sonar_amount
+        if player.sonar > tune.player_max_sonar then
+            player.sonar = tune.player_max_sonar
+        end
+    elseif item.type == "star" then
+        player.stars = player.stars + 1
+    end
+end
+
 local function timestep(player, stick_accel, flap_accel, dt)
     local k = player.on_ground and tune.player_ground_drag_const or tune.player_air_drag_const
     ax = stick_accel - k * player.vx
@@ -206,10 +222,12 @@ function new(px, py)
         damage_timer = 0,
         sonar = tune.player_max_sonar,
         sonar_timer = 0,
+        stars = 0,
 
         -- methods
         process = process,
         draw = draw,
+        pickup = pickup,
     }
 
     return player
