@@ -81,12 +81,12 @@ local function spawn_ring(px, py, vx, vy)
     ping.ring_list:add(ring)
 end
 
-local function new_splat(px, py, nx, ny)
-    return {px = px, py = py, nx = nx, ny = ny, ttl = tune.splat_lifetime}
+local function new_splat(px, py, nx, ny, alpha)
+    return {px = px, py = py, nx = nx, ny = ny, ttl = tune.splat_lifetime * alpha}
 end
 
 local function new_player(px, py)
-    return {px = px, py = py, vx = 0, vy = 0}
+    return {px = px, py = py, vx = 0, vy = 0, eyes_open = true, blink_timer = 3.0 + math.random()}
 end
 
 local function player_timestep(player, stick_x, stick_y, dt)
@@ -102,6 +102,18 @@ local function player_timestep(player, stick_x, stick_y, dt)
 end
 
 local function process_player(player, dt)
+
+    -- blink
+    player.blink_timer = player.blink_timer - dt
+    if player.blink_timer < 0 then
+        if player.eyes_open then
+            player.eyes_open = false
+            player.blink_timer = math.random() * 0.3
+        else
+            player.eyes_open = true
+            player.blink_timer = 3.0 + math.random()
+        end
+    end
 
     local stick_x, stick_y = love.joystick.getAxes(0)
     if math.sqrt(stick_x^2 + stick_y^2) > tune.player_stick_dead_spot then
@@ -126,6 +138,11 @@ local function process_player(player, dt)
     if love.joystick.isDown(0, BUTTON_B) and not player.ping_down then
         player.ping_down = true
         spawn_ring(player.px, player.py, player.vx, player.vy)
+
+        -- blink for a short moment
+        player.eyes_open = false
+        player.blink_timer = 0.5
+
     elseif not love.joystick.isDown(0, BUTTON_B) and player.ping_down then
         player.ping_down = false
     end
@@ -218,18 +235,50 @@ function create_bsp(level)
     return bsp.new(bsp_lines)
 end
 
+-- run code under environment
+local function run_file_with_env(env, untrusted_file)
+    -- use package.path to find untrusted_file
+    for path in string.gmatch(package.path, "[^;]+") do
+        local filename = string.gsub(path, "?", untrusted_file)
+        local file, message = io.open(filename, "r")
+        if file then
+            file:close()
+            local untrusted_function, message = loadfile(filename)
+            if not untrusted_function then 
+                return nil, message 
+            else
+                setfenv(untrusted_function, env)
+                return pcall(untrusted_function)
+            end
+        end
+    end
+end
+
+function create_bsp_from_table(filename)
+    local bsp_lines = nil
+    local env = {Level = function(t) bsp_lines = t end}
+    local result, message = run_file_with_env(env, filename)
+    if not result then
+        print("ERROR: loading "..filename, message)
+        return nil
+    end
+    return bsp.new(bsp_lines)
+end
+
+
 function love.load()
     ping.t = 0
     ping.fps = 0
 
-    gfx.setBlendMode("additive")
-
     print("Welcome to Ping!")
 
-    ping.bsp = create_bsp(level)
+    --ping.bsp = create_bsp(level)
+    ping.bsp = create_bsp_from_table("ping/level")
 
     -- make sure we added a player
-    assert(ping.player)
+    if not ping.player then
+        ping.player = new_player(300, 300)
+    end
 
     --bsp.dump(ping.bsp)
 
@@ -261,13 +310,17 @@ end
 function love.draw()
 
    gfx.setBackgroundColor(0, 0, 0)
+   gfx.setBlendMode("additive")
 
    -- draw fps
    gfx.setColor(255, 255, 255, 255)
    --gfx.print("fps = "..ping.fps, 50, 50)
+   --gfx.print("num_nodes = "..ping.bsp.num_nodes, 50, 20 )
+
+   gfx.push()
+   gfx.translate(-ping.player.px + (gfx.getWidth()/2), -ping.player.py + (2*gfx.getHeight()/3))
 
    --bsp.draw(ping.bsp)
-   --gfx.print("num_nodes = "..ping.bsp.num_nodes, 50, 20 )
 
    -- draw rings
    for ring in ping.ring_list:values() do
@@ -296,9 +349,26 @@ function love.draw()
    end
 
    -- draw player
-   gfx.setColor(0, 255, 0, 255)
-   gfx.circle("line", ping.player.px, ping.player.py, tune.player_height)
+   gfx.setColor(0, 128, 0, 255)
+   --gfx.circle("line", ping.player.px, ping.player.py, tune.player_height)
 
+   -- draw black body
+   gfx.setBlendMode("alpha")
+   gfx.setColor(0, 0, 0, 255)
+   gfx.circle("fill", ping.player.px, ping.player.py, tune.player_height - 1)
+
+   -- draw green eyes
+   if ping.player.eyes_open then
+       local eye_x = 4
+       local eye_y = -2
+       local eye_radius = 1
+
+       gfx.setColor(0, 128, 0, 255)
+       gfx.circle("fill", ping.player.px + eye_x, ping.player.py + eye_y, eye_radius)
+       gfx.circle("fill", ping.player.px - eye_x, ping.player.py + eye_y, eye_radius)
+   end
+
+   gfx.pop()
 end
 
 function love.mousepressed(x, y, button)
@@ -320,6 +390,9 @@ function love.update(dt)
     -- process rings
     ping.ring_list:for_each_remove(
         function (ring)
+
+            local alpha = (ring.ttl > 0) and (ring.ttl / tune.ring_lifetime) or 0
+
             ring.ttl = ring.ttl - dt
             for p in ring:values() do
                 local old_px, old_py = p.px, p.py
@@ -340,7 +413,7 @@ function love.update(dt)
                     -- offset a bit from the wall so we dont get another collision next frame
                     new_px, new_py = ix + nx/2, iy + ny/2
 
-                    ping.splat_list:add(new_splat(ix, iy, nx, ny))
+                    ping.splat_list:add(new_splat(ix, iy, nx, ny, alpha))
                 end
                 p.px, p.py = new_px, new_py
             end
