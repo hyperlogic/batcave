@@ -173,18 +173,6 @@ function draw(bsp)
     end
 end
 
--- for debuging only REMOVE
-local names = {"a", "b", "c", "d", "e", "f", "g", "h", "i", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"}
-local g_index = 1
-function debug_name(bsp)
-    if bsp and bsp.lines then
-        bsp.name = names[g_index]
-        g_index = g_index + 1
-        debug_name(bsp.front)
-        debug_name(bsp.back)
-    end
-end
-
 function dump(bsp, indent)
     if bsp and bsp.lines then
         if not indent then
@@ -192,7 +180,6 @@ function dump(bsp, indent)
         end
         local prefix = string.rep("    ", indent)
 
-        print(prefix.."name = ", bsp.name)
         print(prefix.."nx, ny = ", bsp.nx, bsp.ny)
         for _, line in ipairs(bsp.lines) do
             print(prefix.."line = ", unpack(line))

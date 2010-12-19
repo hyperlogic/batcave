@@ -11,7 +11,15 @@ ping = {
 -- global tune table
 tune = {
     ring_lifetime = 3.0,
-    splat_lifetime = 10.0
+    splat_lifetime = 10.0,
+    player_gravity = 100,
+    player_probe_length = 20,
+    player_height = 10,
+    player_stick_dead_spot = 0.3,
+    player_ground_drag_const = 4,
+    player_air_drag_const = 10,
+    player_stick_accel = 1000,
+    player_jump_vel = 200,
 }
 
 local SOLID = ("X"):byte(1)
@@ -25,12 +33,12 @@ local level = [[
 XXXXXXXXXXXXXXXXXXXX   X
 X                  X   X
 X                      X   
-X                      X
+X         P            X
 X                  XXXXX
 X                  X     
 X   XX             X
 X   XX             X
-X P                X
+X                  X
 XXXXXXX     XXXXXXXX
       X     X           
       X     X
@@ -77,6 +85,78 @@ local function new_splat(px, py, nx, ny)
     return {px = px, py = py, nx = nx, ny = ny, ttl = tune.splat_lifetime}
 end
 
+local function new_player(px, py)
+    return {px = px, py = py, vx = 0, vy = 0}
+end
+
+local function player_timestep(player, stick_x, stick_y, dt)
+    local k = player.on_ground and tune.player_ground_drag_const or tune.player_air_drag_const
+    ax = stick_x - k * player.vx
+    local ay = tune.player_gravity -- stick_y - k * player.vy
+    local vx = ax * dt + player.vx
+    local vy = ay * dt + player.vy
+    local px = 0.5 * ax * dt * dt + player.vx * dt + player.px
+    local py = 0.5 * ay * dt * dt + player.vy * dt + player.py
+    player.vx, player.vy = vx, vy
+    player.px, player.py = px, py
+end
+
+local function process_player(player, dt)
+
+    local stick_x, stick_y = love.joystick.getAxes(0)
+    if math.sqrt(stick_x^2 + stick_y^2) > tune.player_stick_dead_spot then
+        stick_x, stick_y = tune.player_stick_accel * stick_x, 0
+    else
+        stick_x, stick_y = 0, 0
+    end
+
+    -- check joystick buttons
+    local BUTTON_A = 11
+    local BUTTON_B = 12
+    if love.joystick.isDown(0, BUTTON_A) and not player.jump_down then
+        player.jump_down = true
+        -- jump!
+        player.vy = -tune.player_jump_vel
+    elseif not love.joystick.isDown(0, BUTTON_A) and player.jump_down then
+        player.jump_down = false
+    end
+
+    -- euler integrator
+    local time_step = 0.001
+    local time_left = dt
+    while time_left > time_step do
+        player_timestep(player, stick_x, stick_y, time_step)
+        time_left = time_left - time_step
+    end
+    player_timestep(player, stick_x, stick_y, time_left)
+
+    -- downward line_probe
+    local line = {player.px, player.py, player.px, player.py + tune.player_probe_length}
+    local ix, iy, nx, ny = ping.bsp:line_probe(line)
+    if ix and (iy - player.py) < tune.player_height then
+        -- snap the player to the ground
+        player.py = iy - tune.player_height
+        player.vy = 0
+        player.on_ground = true
+    else
+        player.on_ground = false
+    end
+
+    -- forward line_probe
+    if math.abs(player.vx) > 0 then
+        local sign = player.vx > 0 and 1 or -1
+        local forward = sign * tune.player_probe_length
+        local line = {player.px, player.py, player.px + forward, player.py}
+        local ix, iy, nx, ny = ping.bsp:line_probe(line)
+        if ix and math.abs(ix - player.px) < math.abs(tune.player_height) then
+            -- snap the player to the wall
+            player.px = ix - sign * tune.player_height
+            player.vx = 0
+        end
+    end
+
+end
+
 function create_bsp(level)
 
     bsp_lines = {}
@@ -112,6 +192,10 @@ function create_bsp(level)
                     table.insert(bsp_lines, {x2, y2, x1, y1})
                 end
             end
+
+            if line:byte(x) == PLAYER then
+                ping.player = new_player(px, py)
+            end
         end
         prev_line = line
         y = y + 1
@@ -130,7 +214,9 @@ function love.load()
 
     ping.bsp = create_bsp(level)
 
-    --bsp.debug_name(ping.bsp)
+    -- make sure we added a player
+    assert(ping.player)
+
     --bsp.dump(ping.bsp)
 end
 
@@ -163,6 +249,11 @@ function love.draw()
 
        --gfx.point(splat.px, splat.py)
    end
+
+   -- draw player
+   gfx.setColor(0, 255, 0, 255)
+   gfx.circle("line", ping.player.px, ping.player.py, tune.player_height)
+
 end
 
 function love.mousepressed(x, y, button)
@@ -172,6 +263,11 @@ function love.mousereleased(x, y, button)
 end
 
 function love.update(dt)
+
+    -- clamp dt at 1/10 of a sec
+    if dt > 1/10 then
+        dt = 1/10
+    end
 
     ping.fps = 1/dt
     ping.t = ping.t + dt
@@ -214,6 +310,9 @@ function love.update(dt)
            local remove = splat.ttl < 0
            return remove
        end)
+
+   -- process player
+   process_player(ping.player, dt)
 
    if ping.t > 2 then
        spawn_ring(350 + (math.random() * 50), 200 + math.random() * 50)
