@@ -11,7 +11,7 @@ ping = {
 -- global tune table
 tune = {
     ring_lifetime = 3.0,
-    splat_lifetime = 10.0,
+    splat_lifetime = 5.0,
     player_gravity = 100,
     player_probe_length = 20,
     player_height = 10,
@@ -64,18 +64,18 @@ local function new_particle(px, py, vx, vy)
     return {px = px, py = py, vx = vx, vy = vy}
 end
 
-local function spawn_ring(px, py)
+local function spawn_ring(px, py, vx, vy)
 
     local ring = list.new()
     ring.ttl = tune.ring_lifetime
 
-    local SUBDIVS = 200
+    local SUBDIVS = 100
     local SPEED = 100
 
     local d_theta = (2 * math.pi) / SUBDIVS
     for i = 1, SUBDIVS do
-        local vx, vy = SPEED * math.cos(d_theta * i), SPEED * math.sin(d_theta * i)
-        ring:add(new_particle(px, py, vx, vy))
+        local pvx, pvy = SPEED * math.cos(d_theta * i), SPEED * math.sin(d_theta * i)
+        ring:add(new_particle(px, py, vx + pvx, vy + pvy))
     end
 
     ping.ring_list:add(ring)
@@ -112,14 +112,24 @@ local function process_player(player, dt)
 
     -- check joystick buttons
     local BUTTON_A = 11
-    local BUTTON_B = 12
     if love.joystick.isDown(0, BUTTON_A) and not player.jump_down then
         player.jump_down = true
-        -- jump!
-        player.vy = -tune.player_jump_vel
+        if player.on_ground then
+            -- jump!
+            player.vy = -tune.player_jump_vel
+        end
     elseif not love.joystick.isDown(0, BUTTON_A) and player.jump_down then
         player.jump_down = false
     end
+
+    local BUTTON_B = 12
+    if love.joystick.isDown(0, BUTTON_B) and not player.ping_down then
+        player.ping_down = true
+        spawn_ring(player.px, player.py, player.vx, player.vy)
+    elseif not love.joystick.isDown(0, BUTTON_B) and player.ping_down then
+        player.ping_down = false
+    end
+
 
     -- euler integrator
     local time_step = 0.001
@@ -130,19 +140,23 @@ local function process_player(player, dt)
     end
     player_timestep(player, stick_x, stick_y, time_left)
 
-    -- downward line_probe
-    local line = {player.px, player.py, player.px, player.py + tune.player_probe_length}
-    local ix, iy, nx, ny = ping.bsp:line_probe(line)
-    if ix and (iy - player.py) < tune.player_height then
-        -- snap the player to the ground
-        player.py = iy - tune.player_height
-        player.vy = 0
-        player.on_ground = true
-    else
-        player.on_ground = false
+    -- vertical line_probe
+    if math.abs(player.vy) > 0 then
+        local sign = player.vy > 0 and 1 or -1
+        local direction = sign * tune.player_probe_length
+        local line = {player.px, player.py, player.px, player.py + direction}
+        local ix, iy, nx, ny = ping.bsp:line_probe(line)
+        if ix and math.abs(iy - player.py) < math.abs(tune.player_height) then
+            -- snap the player to the ground
+            player.py = iy - sign * tune.player_height
+            player.vy = 0
+            player.on_ground = true
+        else
+            player.on_ground = false
+        end
     end
 
-    -- forward line_probe
+    -- horizontal line_probe
     if math.abs(player.vx) > 0 then
         local sign = player.vx > 0 and 1 or -1
         local forward = sign * tune.player_probe_length
@@ -218,6 +232,30 @@ function love.load()
     assert(ping.player)
 
     --bsp.dump(ping.bsp)
+
+    -- hide mouse
+    love.mouse.setVisible(false)
+end
+
+function draw_segment(x1, y1, x2, y2, alpha)
+
+    local MIN_SEG_DIST = 5
+    local MAX_SEG_DIST = 10
+
+    local line_dist = math.sqrt((x1 - x2)^2 + (y1 - y2)^2)
+    if line_dist < MAX_SEG_DIST then
+        local line_alpha 
+        if line_dist < MIN_SEG_DIST then
+            line_alpha = 1
+        else
+            line_alpha = (MAX_SEG_DIST - line_dist) / (MAX_SEG_DIST - MIN_SEG_DIST)
+        end
+        gfx.setColor(0, 255, 0, 255 * alpha * line_alpha)
+        gfx.line(x1, y1, x2, y2)
+    end
+    gfx.setColor(0, 255, 0, 255 * alpha)
+    gfx.point(x1, y1)
+
 end
 
 function love.draw()
@@ -226,18 +264,25 @@ function love.draw()
 
    -- draw fps
    gfx.setColor(255, 255, 255, 255)
-   gfx.print("fps = "..ping.fps, 50, 50)
+   --gfx.print("fps = "..ping.fps, 50, 50)
 
    --bsp.draw(ping.bsp)
-   gfx.print("num_nodes = "..ping.bsp.num_nodes, 50, 20 )
+   --gfx.print("num_nodes = "..ping.bsp.num_nodes, 50, 20 )
 
    -- draw rings
    for ring in ping.ring_list:values() do
        local alpha = (ring.ttl > 0) and (ring.ttl / tune.ring_lifetime) or 0
        gfx.setColor(0, 255, 0, 255 * alpha)
+       local prev_p, first_p
        for p in ring:values() do
-           gfx.point(p.px, p.py)
+           if prev_p then
+               draw_segment(prev_p.px, prev_p.py, p.px, p.py, alpha)
+           else
+               first_p = p
+           end
+           prev_p = p
        end
+       draw_segment(prev_p.px, prev_p.py, first_p.px, first_p.py, alpha)
    end
 
    -- draw splats
@@ -313,10 +358,4 @@ function love.update(dt)
 
    -- process player
    process_player(ping.player, dt)
-
-   if ping.t > 2 then
-       spawn_ring(350 + (math.random() * 50), 200 + math.random() * 50)
-       ping.t = 0
-   end
-
 end
