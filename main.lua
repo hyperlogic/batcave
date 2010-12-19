@@ -168,7 +168,7 @@ function love.draw()
    gfx.push()
    gfx.translate(-ping.player.px + (gfx.getWidth()/2), -ping.player.py + (2*gfx.getHeight()/3))
 
-   bsp.draw(ping.bsp)
+   --bsp.draw(ping.bsp)
 
    -- draw rings
    for ring in ping.ring_list:values() do
