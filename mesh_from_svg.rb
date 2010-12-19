@@ -7,11 +7,12 @@ require 'matrix'
 
 $debug = false
 
+Path = Struct.new :positions, :name
+
 module MeshFromSVG
 
   # transforms a pos by the given xform represented as a 3x3 Matrix
   def self.transform_pos pos, xform
-    puts "pos = #{pos.inspect}, xform = #{xform.inspect}"
     col = Matrix.column_vector([pos[0], pos[1], 1])
     col = xform * col
     [col[0,0], col[1,0]]
@@ -20,7 +21,7 @@ module MeshFromSVG
   # Converts a path REXML::Element into a new Element with absolute commands &
   # coordinates in the global coordinate frame.
   # these new paths are added to the global $paths varaible
-  def self.transform_path path, parent_xform
+  def self.transform_path path, g, parent_xform
     if $debug
       $log.puts "path id = #{path.attributes['id']}"
     end
@@ -47,15 +48,25 @@ module MeshFromSVG
       token = tokens.shift
       case token
       when "M"
-        # puts "M"
+        # moveto absolute
         while !(tokens[0] =~ command_pattern) do
           x = tokens.shift.to_f
           y = tokens.shift.to_f
           # puts "(#{x}, #{y})"
           positions << [x, y]
         end
+      when "m"
+        # moveto relative
+        prev = [0, 0]
+        while !(tokens[0] =~ command_pattern) do
+          x = tokens.shift.to_f
+          y = tokens.shift.to_f
+          # puts "(#{x}, #{y})"
+          prev = [x + prev[0], y + prev[1]]
+          positions << prev
+        end
       when "L"
-        # puts "L"
+        # lineto absolute
         while !(tokens[0] =~ command_pattern) do
           x = tokens.shift.to_f
           y = tokens.shift.to_f
@@ -69,8 +80,10 @@ module MeshFromSVG
       end
     end
 
+    positions.map! {|pos| transform_pos(pos, xform)}
+
     # add it to the global path array
-    $paths << positions
+    $paths << Path.new(positions, g.attributes['inkscape:label'])
   end
 
   # parses a transform attribute string and 
@@ -107,7 +120,7 @@ module MeshFromSVG
       transform_group child, xform
     end
     g.elements.each('path') do |child|
-      transform_path child, xform
+      transform_path child, g, xform
     end
   end
 
@@ -165,7 +178,7 @@ module MeshFromSVG
     end
   end
 
-  def self.extract_points svg_file
+  def self.build_paths svg_file
 
     $log = STDOUT
 
@@ -178,23 +191,24 @@ module MeshFromSVG
     # traverse document filling up $paths with each outline
     transform_doc doc
 
-    # return the first path
-    $paths[0]
+    $paths
   end
 
 end
 
-points = MeshFromSVG.extract_points ARGV[0]
+paths = MeshFromSVG.build_paths ARGV[0]
 
 puts "-- exported from #{ARGV[0]}"
+
 puts "Level {"
-prev = nil
-points.each do |point|
-  if prev
-    # flip order so lines are inward.
-    # puts "    { #{point[0]}, #{point[1]}, #{prev[0]}, #{prev[1]} },"
-    puts "    { #{prev[0]}, #{prev[1]}, #{point[0]}, #{point[1]} },"
+paths.each do |path|
+  prev = nil
+  path.positions.each do |point|
+    if prev
+      puts "    { #{prev[0]}, #{prev[1]}, #{point[0]}, #{point[1]}, \"#{path.name}\" },"
+    end
+    prev = point
   end
-  prev = point
 end
+
 puts "}"

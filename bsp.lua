@@ -33,6 +33,7 @@ local function build(lines)
 
                 local lx1, ly1 = line[1], line[2]
                 local lx2, ly2 = line[3], line[4]
+                local ltype = line[5]
 
                 local dot1 = (lx1 - sx1) * snx + (ly1 - sy1) * sny
                 local dot2 = (lx2 - sx1) * snx + (ly2 - sy1) * sny
@@ -49,11 +50,11 @@ local function build(lines)
 
                     local front_line, back_line
                     if dot1 > 0 or dot2 < 0 then
-                        front_line = {lx1, ly1, ix, iy}
-                        back_line = {ix, iy, lx2, ly2}
+                        front_line = {lx1, ly1, ix, iy, ltype}
+                        back_line = {ix, iy, lx2, ly2, ltype}
                     else
-                        front_line = {ix, iy, lx2, ly2}
-                        back_line = {lx1, ly1, ix, iy}
+                        front_line = {ix, iy, lx2, ly2, ltype}
+                        back_line = {lx1, ly1, ix, iy, ltype}
                     end
 
                     if ((front_line[1] - front_line[3])^2 + (front_line[2] - front_line[4])^2) > 0.01 then
@@ -78,6 +79,7 @@ local function point_on_lines(px, py, lines)
     for _, line in ipairs(lines) do
         local lx1, ly1 = line[1], line[2]
         local lx2, ly2 = line[3], line[4]
+        local ltype = line[5]
 
         local dot1 = (lx2 - lx1) * (px - lx1) + (ly2 - ly1) * (py - ly1)
         local dot2 = (lx1 - lx2) * (px - lx2) + (ly1 - ly2) * (py - ly2)
@@ -87,7 +89,7 @@ local function point_on_lines(px, py, lines)
             local lnx, lny = ly2 - ly1, lx1 - lx2
             local len = math.sqrt(lnx * lnx + lny * lny)
             lnx, lny = lnx / len, lny / len
-            return px, py, lnx, lny
+            return px, py, lnx, lny, ltype
         end
     end
     return nil
@@ -114,25 +116,25 @@ local function line_probe(bsp, line)
             local ix, iy = lx1 + (lx2 - lx1) * local_t, ly1 + (ly2 - ly1) * local_t
 
             if dot1 > 0 or dot2 < 0 then
-                local rpx, rpy, rnx, rny = line_probe(bsp.front, {lx1, ly1, ix, iy})
+                local rpx, rpy, rnx, rny, rtype = line_probe(bsp.front, {lx1, ly1, ix, iy})
                 if rpx then
-                    return rpx, rpy, rnx, rny
+                    return rpx, rpy, rnx, rny, rtype
                 else 
-                    rpx, pry, rnx, rny = point_on_lines(ix, iy, bsp.lines)
+                    rpx, pry, rnx, rny, rtype = point_on_lines(ix, iy, bsp.lines)
                     if rpx then
-                        return rpx, pry, rnx, rny
+                        return rpx, pry, rnx, rny, rtype
                     else
                         return line_probe(bsp.back, {ix, iy, lx2, ly2})
                     end
                 end
             else
-                local rpx, rpy, rnx, rny = line_probe(bsp.back, {lx1, ly1, ix, iy})
+                local rpx, rpy, rnx, rny, rtype = line_probe(bsp.back, {lx1, ly1, ix, iy})
                 if rpx then
-                    return rpx, rpy, rnx, rny
+                    return rpx, rpy, rnx, rny, rtype
                 else 
                     rpx, rpy, rnx, rny = point_on_lines(ix, iy, bsp.lines)
                     if rpx then
-                        return rpx, rpy, rnx, rny
+                        return rpx, rpy, rnx, rny, rtype
                     else
                         return line_probe(bsp.front, {ix, iy, lx2, ly2})
                     end
@@ -145,7 +147,7 @@ local function line_probe(bsp, line)
 end
 
 -- takes a table (array) of lines.
--- where each line is a table of 4 elements: { x1, y1, x2, y2 }
+-- where each line is a table of 5 elements: { x1, y1, x2, y2, "type" }
 -- returns a bsp table, which can be queried with line probes.
 function new(lines)
     num_nodes = 0
@@ -155,13 +157,25 @@ function new(lines)
     return bsp
 end
 
+local bsp_colors = {ground = {0, 255, 0},
+                    spikes = {255, 0, 0}}
+
 function draw(bsp)
+
     if bsp then
         if bsp.lines then
             for _, line in ipairs(bsp.lines) do
-                gfx.setColor(255, line[1] % 255, line[2] % 255, 255)
+
+                local ltype = line[5]
+
+                if bsp_colors[ltype] then
+                    gfx.setColor(unpack(bsp_colors[ltype]))
+                else
+                    gfx.setColor(0, 255, 0)
+                end
+
                 gfx.line(line[1], line[2], line[3], line[4])
-                gfx.setColor(0, 255, 0)
+
                 local cx, cy = (line[1] + line[3])/2, (line[2] + line[4])/2
                 local normal_scale = 10
                 gfx.line(cx, cy, cx + bsp.nx * normal_scale, cy + bsp.ny * normal_scale)
