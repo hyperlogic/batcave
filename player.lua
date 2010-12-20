@@ -1,4 +1,6 @@
 local gfx = love.graphics
+local kbd = love.keyboard
+local joy = love.joystick
 
 module(..., package.seeall)
 
@@ -15,6 +17,8 @@ local function pickup(player, item)
         end
     elseif item.type == "star" then
         player.stars = player.stars + 1
+    elseif item.type == "exit" then
+        player.exit = true
     end
 end
 
@@ -26,6 +30,14 @@ local function timestep(player, stick_accel, flap_accel, dt)
     local vy = ay * dt + player.vy
     local px = 0.5 * ax * dt * dt + player.vx * dt + player.px
     local py = 0.5 * ay * dt * dt + player.vy * dt + player.py
+
+    -- clamp vel
+    local v_len = math.sqrt(vx^2 + vy^2)
+    if v_len > tune.player_max_vel then
+        vx = (vx / v_len) * tune.player_max_vel
+        vy = (vy / v_len) * tune.player_max_vel
+    end
+
     player.vx, player.vy = vx, vy
     player.px, player.py = px, py
 end
@@ -49,26 +61,39 @@ local function process(player, dt)
     end
 
     -- get left stick, account for dead_spot
-    local stick_x, stick_y = love.joystick.getAxes(0)
-    if player.dead or math.sqrt(stick_x^2 + stick_y^2) < tune.player_stick_dead_spot then
+    local stick_x, stick_y = joy.getAxes(0)
+    if stick_x then
+        if player.dead or math.sqrt(stick_x^2 + stick_y^2) < tune.player_stick_dead_spot then
+            stick_x, stick_y = 0, 0
+        end
+    else
         stick_x, stick_y = 0, 0
+    end
+
+    if kbd.isDown("left") then
+        stick_x = stick_x - 0.7
+    end
+    if kbd.isDown("right") then
+        stick_x = stick_x + 0.7
     end
 
     stick_accel = tune.player_stick_accel * stick_x
 
     if not player.dead then
-        -- A is for flaps
+        -- flaps
         local BUTTON_A = 11
-        if love.joystick.isDown(0, BUTTON_A) and not player.flap_down then
+        local flap_action = joy.isDown(0, BUTTON_A) or kbd.isDown("up")
+        if flap_action and not player.flap_down then
             player.flap_down = true
             player.flap_list:add({ttl = tune.player_flap_duration})
-        elseif not love.joystick.isDown(0, BUTTON_A) and player.flap_down then
+        elseif not flap_action and player.flap_down then
             player.flap_down = false
         end
 
-        -- B is for pings
+        -- pings
         local BUTTON_B = 12
-        if love.joystick.isDown(0, BUTTON_B) and not player.ping_down then
+        local ping_action = joy.isDown(0, BUTTON_B) or kbd.isDown(" ")
+        if ping_action and not player.ping_down then
             player.ping_down = true
 
             if player.sonar > tune.player_sonar_cost then
@@ -81,7 +106,7 @@ local function process(player, dt)
             player.eyes_open = false
             player.blink_timer = 0.5
 
-        elseif not love.joystick.isDown(0, BUTTON_B) and player.ping_down then
+        elseif not ping_action and player.ping_down then
             player.ping_down = false
         end
     end
@@ -223,6 +248,7 @@ function new(px, py)
         sonar = tune.player_max_sonar,
         sonar_timer = 0,
         stars = 0,
+        exit = false,
 
         -- methods
         process = process,
