@@ -200,7 +200,7 @@ paths = MeshFromSVG.build_paths ARGV[0]
 
 puts "-- exported from #{ARGV[0]}"
 
-puts "Level {"
+puts "#{File.basename(ARGV[0], ".svg")}_level = {"
 paths.each do |path|
   prev = nil
   path.positions.each do |point|

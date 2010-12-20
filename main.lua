@@ -2,6 +2,10 @@ require "list"
 require "bsp"
 require "player"
 
+-- level data
+require "batcave"
+require "caverns"
+
 local gfx = love.graphics
 local kbd = love.keyboard
 
@@ -86,33 +90,8 @@ local function new_item(px, py, type)
             type = type}
 end
 
--- run code under environment
-local function run_file_with_env(env, untrusted_file)
-    -- use package.path to find untrusted_file
-    for path in string.gmatch(package.path, "[^;]+") do
-        local filename = string.gsub(path, "?", untrusted_file)
-        local file, message = io.open(filename, "r")
-        if file then
-            file:close()
-            local untrusted_function, message = loadfile(filename)
-            if not untrusted_function then 
-                return nil, message 
-            else
-                setfenv(untrusted_function, env)
-                return pcall(untrusted_function)
-            end
-        end
-    end
-end
-
-function create_bsp_from_table(filename)
-    local bsp_lines = nil
-    local env = {Level = function(t) bsp_lines = t end}
-    local result, message = run_file_with_env(env, filename)
-    if not result then
-        print("ERROR: loading "..filename, message)
-        return nil
-    end
+function create_bsp_from_table(level_table)
+    local bsp_lines = level_table
 
     -- filter out special types of lines
     local new_lines = {}
@@ -267,9 +246,9 @@ function level_play_state.enter(self)
     ping.waiting_for_restart = false
 
     if ping.level_num == 1 then
-        ping.bsp = create_bsp_from_table("ping/batcave")
+        ping.bsp = create_bsp_from_table(batcave_level)
     elseif ping.level_num == 2 then
-        ping.bsp = create_bsp_from_table("ping/caverns")
+        ping.bsp = create_bsp_from_table(caverns_level)
     end
 
     --bsp.dump(ping.bsp)
