@@ -45,10 +45,9 @@ type_color = {
     spikes = {255, 0, 0, 255},
 }
 
--- textures
 textures = {}
-
 fonts = {}
+sounds = {}
 
 current_state = nil
 
@@ -511,6 +510,14 @@ function love.load()
 
     fonts.large = gfx.newFont("prstartk.ttf", 50)
     fonts.medium = gfx.newFont("prstartk.ttf", 35)
+
+    sounds.ping = love.audio.newSource("ping.ogg", "static")
+    sounds.flap = love.audio.newSource("flap.ogg", "static")
+    sounds.hurt = love.audio.newSource("hurt.ogg", "static")
+    sounds.death = love.audio.newSource("death.ogg", "static")
+    sounds.health = love.audio.newSource("health.ogg", "static")
+    sounds.sonar = love.audio.newSource("sonar.ogg", "static")
+    sounds.star = love.audio.newSource("star.ogg", "static")
 
     -- initial state
     set_current_state(title_screen_state)

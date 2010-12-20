@@ -7,15 +7,18 @@ module(..., package.seeall)
 local function pickup(player, item)
     if item.type == "vial" then
         player.health = player.health + tune.player_pickup_vial_amount
+        love.audio.play(sounds.health)
         if player.health > tune.player_max_health then
             player.health = tune.player_max_health
         end
     elseif item.type == "sonar" then
         player.sonar = player.sonar + tune.player_pickup_sonar_amount
+        love.audio.play(sounds.sonar)
         if player.sonar > tune.player_max_sonar then
             player.sonar = tune.player_max_sonar
         end
     elseif item.type == "star" then
+        love.audio.play(sounds.star)
         player.stars = player.stars + 1
     elseif item.type == "exit" then
         player.exit = true
@@ -86,6 +89,9 @@ local function process(player, dt)
         if flap_action and not player.flap_down then
             player.flap_down = true
             player.flap_list:add({ttl = tune.player_flap_duration})
+
+            love.audio.play(sounds.flap)
+
         elseif not flap_action and player.flap_down then
             player.flap_down = false
         end
@@ -98,6 +104,9 @@ local function process(player, dt)
 
             if player.sonar > tune.player_sonar_cost then
                 spawn_ring(player.px, player.py, player.vx, player.vy)
+
+                love.audio.play(sounds.ping)
+
                 player.sonar_timer = tune.player_sonar_regen_timer
                 player.sonar = player.sonar - tune.player_sonar_cost
             end
@@ -194,6 +203,8 @@ local function process(player, dt)
         if was_damaged and player.damage_timer < 0 then
             player.health = player.health - tune.player_spike_damage
             player.damage_timer = tune.player_damage_timer
+
+            love.audio.play(sounds.hurt)
         end
 
         -- regen sonar
@@ -207,6 +218,7 @@ local function process(player, dt)
 
         -- death
         if player.health <= 0 then
+            love.audio.play(sounds.death)
             player.dead = true
         end
     end
