@@ -1,6 +1,6 @@
+require "joy"
 local gfx = love.graphics
 local kbd = love.keyboard
-local joy = love.joystick
 
 module(..., package.seeall)
 
@@ -64,7 +64,7 @@ local function process(player, dt)
     end
 
     -- get left stick, account for dead_spot
-    local stick_x, stick_y = joy.getAxes(0)
+    local stick_x, stick_y = joy.getAxes(1)
     if stick_x then
         if player.dead or math.sqrt(stick_x^2 + stick_y^2) < tune.player_stick_dead_spot then
             stick_x, stick_y = 0, 0
@@ -85,7 +85,7 @@ local function process(player, dt)
     if not player.dead then
         -- flaps
         local BUTTON_A = 11
-        local flap_action = joy.isDown(0, BUTTON_A) or kbd.isDown("up")
+        local flap_action = joy.isDown(1, BUTTON_A) or kbd.isDown("up")
         if flap_action and not player.flap_down then
             player.flap_down = true
             player.flap_list:add({ttl = tune.player_flap_duration})
@@ -98,7 +98,7 @@ local function process(player, dt)
 
         -- pings
         local BUTTON_B = 12
-        local ping_action = joy.isDown(0, BUTTON_B) or kbd.isDown(" ")
+        local ping_action = joy.isDown(1, BUTTON_B) or kbd.isDown(" ")
         if ping_action and not player.ping_down then
             player.ping_down = true
 

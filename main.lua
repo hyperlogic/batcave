@@ -52,7 +52,7 @@ sounds = {}
 current_state = nil
 
 local function new_particle(px, py, vx, vy)
-    return { px = px, py = py, 
+    return { px = px, py = py,
              vx = vx, vy = vy }
 end
 
@@ -74,9 +74,9 @@ function spawn_ring(px, py, vx, vy)
 end
 
 local function new_splat(px, py, nx, ny, alpha, type)
-    return {px = px, py = py, 
-            nx = nx, ny = ny, 
-            ttl = tune.splat_lifetime * alpha, 
+    return {px = px, py = py,
+            nx = nx, ny = ny,
+            ttl = tune.splat_lifetime * alpha,
             type = type}
 end
 
@@ -112,7 +112,7 @@ function create_bsp_from_table(level_table)
             table.insert(new_lines, line)
         end
     end
-    
+
     return bsp.new(new_lines)
 end
 
@@ -129,7 +129,7 @@ end
 --
 title_screen_state = {}
 function title_screen_state.enter(self)
-    
+
     self.slide_num = 1
     self.slides = {{"Batcave", "A game by", "Anthony Thibault", "ajt@hyperlogic.org"},
                    {"Batcave", "Use a xbox360 controller", "or keyboard"},
@@ -276,7 +276,7 @@ function draw_segment(x1, y1, x2, y2, alpha)
 
     local line_dist = math.sqrt((x1 - x2)^2 + (y1 - y2)^2)
     if line_dist < MAX_SEG_DIST then
-        local line_alpha 
+        local line_alpha
         if line_dist < MIN_SEG_DIST then
             line_alpha = 1
         else
@@ -348,7 +348,7 @@ function game_process(dt)
                    item.orig_x = item.px
                end
            end
-           
+
            -- check line of sight and proximity to player.
            local line = {item.px, item.py, ping.player.px, ping.player.py}
            local ix = ping.bsp:line_probe(line)
@@ -450,7 +450,9 @@ function game_draw()
     -- draw items
     for item in ping.item_list:values() do
         gfx.setColor(255, 255, 255, 255*item.alpha)
-        gfx.drawq(textures[item.type], item.quad, item.px - item.width/2, item.py - item.width/2, 0)
+        -- removed in love 0.8
+        --gfx.drawq(textures[item.type], item.quad, item.px - item.width/2, item.py - item.width/2, 0)
+        gfx.draw(textures[item.type], item.quad, item.px - item.width/2, item.py - item.width/2, 0)
     end
 
     gfx.pop()
@@ -493,6 +495,9 @@ end
 --
 
 function love.load()
+
+    love.window.setTitle("Batcave")
+
     ping.t = 0
     ping.fps = 0
     ping.ring_list = list.new()
